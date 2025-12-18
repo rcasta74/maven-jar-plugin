@@ -55,6 +55,8 @@ public abstract class AbstractJarMojo extends AbstractMojo {
 
     private static final String SEPARATOR = FileSystems.getDefault().getSeparator();
 
+    private static final String SKIP_PACKAGING_MSG = "Skipping packaging of the ";
+
     /**
      * List of files to include. Specified as fileset patterns which are relative to the input directory whose contents
      * is being packaged into the JAR.
@@ -269,7 +271,11 @@ public abstract class AbstractJarMojo extends AbstractMojo {
      * @throws MojoExecutionException in case of an error.
      */
     public File createArchive() throws MojoExecutionException {
-        File jarFile = getJarFile(outputDirectory, finalName, getClassifier());
+        if (skipIfEmpty
+                && (!getClassesDirectory().exists() || getClassesDirectory().list().length < 1)) {
+            getLog().info(SKIP_PACKAGING_MSG + getType());
+            return null;
+        }
 
         FileSetManager fileSetManager = new FileSetManager();
         FileSet jarContentFileSet = new FileSet();
@@ -278,6 +284,13 @@ public abstract class AbstractJarMojo extends AbstractMojo {
         jarContentFileSet.setExcludes(Arrays.asList(getExcludes()));
 
         String[] includedFiles = fileSetManager.getIncludedFiles(jarContentFileSet);
+
+        if (skipIfEmpty && includedFiles.length < 1) {
+            getLog().info(SKIP_PACKAGING_MSG + getType());
+            return null;
+        }
+
+        File jarFile = getJarFile(outputDirectory, finalName, getClassifier());
 
         if (detectMultiReleaseJar
                 && Arrays.stream(includedFiles)
@@ -351,12 +364,10 @@ public abstract class AbstractJarMojo extends AbstractMojo {
                     + "Please see the link >>Using Your Own Manifest File<< on the plugin site.");
         }
 
-        if (skipIfEmpty
-                && (!getClassesDirectory().exists() || getClassesDirectory().list().length < 1)) {
-            getLog().info("Skipping packaging of the " + getType());
-        } else {
-            File jarFile = createArchive();
+        File jarFile = createArchive();
 
+        // if jarFile is null, jar creation was skipped
+        if (jarFile != null) {
             if (attach) {
                 if (hasClassifier()) {
                     projectHelper.attachArtifact(getProject(), getType(), getClassifier(), jarFile);
